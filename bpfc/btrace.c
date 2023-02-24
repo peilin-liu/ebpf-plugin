@@ -29,6 +29,8 @@ BPF_HASH(sysdesc, u32, struct sysdesc_t);
 
 BPF_HASH(sysfilter, u32, u8);
 
+BPF_HASH(tids_filter, u32, u32);
+
 RAW_TRACEPOINT_PROBE(sys_enter){
     
     PROCESS_FILTER

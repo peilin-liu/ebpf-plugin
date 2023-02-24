@@ -25,6 +25,18 @@ def insert_tid_filter(bpf_text, tid):
     return bpf_text
 #
 
+def insert_tids_filter(bpf_text, tids):
+    tid_filter = """
+    u32 tid_ = bpf_get_current_pid_tgid();
+    if (!tids_filter.lookup(&tid_)) {
+        return 0;
+    }
+    """
+    bpf_text = bpf_text.replace("PROCESS_FILTER", tid_filter)
+
+    return bpf_text
+#
+
 def insert_uid_filter(bpf_text, uid):
     bpf_text = "#define FILTER_UID {}\n".format(uid) + bpf_text
     uid_filter = """

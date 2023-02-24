@@ -42,7 +42,7 @@ def print_syscall_event(cpu, data, size):
             #
             syscallName = sysUserDesc[1]
             nArgs = sysUserDesc[0]
-            outStr = "%s %d-%d %s(%d) (0x%08x) (0x%08x)"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.pc, event.lr)
+            outStr = "%s %d-%d %s(%d) (0x%08x) (0x%08x)" % (tm, event.tgid, event.pid, syscallName, event.syscallId, event.pc, event.lr)
             listId = 0
             for i in range(0, nArgs):
                 mask = 1 << i
@@ -158,7 +158,7 @@ if __name__ == "__main__":
         if args.pid:
             c_src = utils.bpf_utils.insert_pid_filter(c_src, args.pid)
         elif args.tid:
-            c_src = utils.bpf_utils.insert_tid_filter(c_src, args.tid)
+            c_src = utils.bpf_utils.insert_tids_filter(c_src, args.tid)
         elif args.uid:
             c_src = utils.bpf_utils.insert_uid_filter(c_src, args.uid)
         else:
@@ -189,6 +189,12 @@ if __name__ == "__main__":
             for filter_sysId in filters:
                 tblfilter[c_int(filter_sysId)] = c_byte(1)
             #
+        #
+        if args.tid:
+            tids = args.tid.split(',')
+            tid_b = b["tids_filter"]
+            for tid in tids:
+                tid_b[c_int(tid)] = c_int(tid)
         #
         inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
         input_map[c_int(0)] = inputVal
