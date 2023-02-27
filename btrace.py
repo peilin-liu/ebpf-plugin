@@ -62,8 +62,8 @@ def print_stack(event):
             print("    %s" % b.sym(addr, event.tgid_pid))
 
 def handle(event, syscallName, debug_str):
-    if event.type == 3:
-        print_stack(event)
+    #if event.type == 3:
+    #    print_stack(event)
 
     print(debug_str)
     
@@ -71,6 +71,7 @@ def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
     tm = datetime.now().strftime('%m-%d %H:%M:%S.%f')[:-3]
     outStr = ""
+    syscallName = ""
     if (event.type == 1):
         systbl = g_sys_platform.g_systbl
         if (event.syscallId in systbl):
@@ -177,11 +178,11 @@ if __name__ == "__main__":
 
     program_filter = parser.add_mutually_exclusive_group(required=True)
     program_filter.add_argument("-p", "--pid", help="use process id filter", type=int)
-    program_filter.add_argument("-t", "--tid", help="use thread id filter", type=int)
+    program_filter.add_argument("-t", "--tid", help="use thread id filter", type=str)
     program_filter.add_argument("-u", "--uid", help="use user id filter", type=int)
     program_filter.add_argument("-n", "--name", help="use process name filter", type=str)
-    program_filter.add_argument("-to", "--timeout", help="filter function only function timedouted, used ms", type=int)
-    program_filter.add_argument("-f", "--folded", action="store_true", help="output folded format, one line per stack (for flame graphs)")
+    parser.add_argument("-to", "--timeout", help="filter function only function timedouted, used ms", type=int)
+    parser.add_argument("-fd", "--folded", action="store_true", help="output folded format, one line per stack (for flame graphs)")
 
     program_platform = parser.add_mutually_exclusive_group(required=True)
 
@@ -204,6 +205,11 @@ if __name__ == "__main__":
             c_src = utils.bpf_utils.insert_uid_filter(c_src, args.uid)
         else:
             c_src = utils.bpf_utils.insert_name_filter(c_src, args.name)
+        #
+        timeout = 0
+        if args.timeout:
+            timeout = args.timeout
+        c_src = utils.bpf_utils.insert_timeout_filter(c_src, timeout)
         #
         b = BPF(text=c_src)
         input_map = b["input"]
@@ -235,12 +241,7 @@ if __name__ == "__main__":
             tids = args.tid.split(',')
             tid_b = b["tids_filter"]
             for tid in tids:
-                tid_b[c_int(tid)] = c_int(tid)
-        #
-        timeout = 0
-        if args.to:
-            timeout = args.to
-        utils.bpf_utils.insert_timeout_filter(c_src, timeout)
+                tid_b[c_int(int(tid))] = c_int(int(tid))
         #
         inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
         input_map[c_int(0)] = inputVal

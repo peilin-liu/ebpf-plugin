@@ -3,6 +3,8 @@
 #include <linux/sched.h>
 #include <linux/bpf.h>
 
+//#define USER_STACKS
+//#define KERNEL_STACKS
 struct syscall_data_t {
     u32 pid;
     u32 tgid;
@@ -51,7 +53,7 @@ BPF_HASH(sysfilter, u32, u8);
 
 BPF_HASH(tids_filter, u32, u32);
 
-BPF_HASH(entryinfo, u64, struct entry_t);
+BPF_HASH(entryinfo, u32, struct entry_t);
 
 #if defined(USER_STACKS) || defined(KERNEL_STACKS)
 BPF_STACK_TRACE(stacks, 2048);
@@ -66,15 +68,14 @@ RAW_TRACEPOINT_PROBE(sys_enter){
     struct pt_regs *regs = (struct pt_regs*)(ctx->args[0]);
     unsigned long syscall_id = ctx->args[1];
 
-    entry = entryinfo.lookup(&tid)
+    struct entry_t *entry = entryinfo.lookup(&tid);
     if(!entry){
         struct entry_t new_entry = {};
-        entryinfo.update(&tid, &new_entry)
-        entry = &new_entry
+        entryinfo.update(&tid, &new_entry);
+        entry = &new_entry;
     }
     
     entry->start_ns = bpf_ktime_get_ns();
-    entry->id = id;
     #ifdef USER_STACKS
     entry->user_stack_id = stacks.get_stackid(ctx, BPF_F_USER_STACK);
     #endif
@@ -174,17 +175,17 @@ RAW_TRACEPOINT_PROBE(sys_exit){
     if (inputParams) {
         struct syscall_data_t data = {0};
 
-        entry = entryinfo.lookup(&tid)
+        struct entry_t *entry = entryinfo.lookup(&tid);
         if(entry){
             data.start_ns = entry->start_ns;
-            data.duration_ns = bpf_ktime_get_ns() - entryp->start_ns;
+            data.duration_ns = bpf_ktime_get_ns() - entry->start_ns;
             #ifdef USER_STACKS
-            data.user_stack_id = entryp->user_stack_id;
+            data.user_stack_id = entry->user_stack_id;
             #endif
 
             #ifdef KERNEL_STACKS
-            data.kernel_stack_id = entryp->kernel_stack_id;
-            data.kernel_ip = entryp->kernel_ip;
+            data.kernel_stack_id = entry->kernel_stack_id;
+            data.kernel_ip = entry->kernel_ip;
             #endif
 
             TIMEOUT_FILTER

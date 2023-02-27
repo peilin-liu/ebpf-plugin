@@ -73,8 +73,9 @@ def insert_name_filter(bpf_text, program_name):
 #
 
 def insert_timeout_filter(bpf_text, timeout):
+    bpf_text = "#define FILTER_TIMEOUT {}\n".format(timeout) + bpf_text
     timeout_filter = """
-    if (data.duration_ns < timeout * 1000000) {
+    if (data.duration_ns < FILTER_TIMEOUT * 1000000) {
         return 0;
     }
     """
