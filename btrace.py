@@ -124,10 +124,10 @@ def print_syscall_event(cpu, data, size):
         if (event.syscallId in systbl):
             sysUserDesc = systbl[event.syscallId]
             syscallName = sysUserDesc[1]
-            outStr = "%s %d-%d %s(%d) return [0x%016x][%04d]" % (tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret, event.ret2)
+            outStr = "%s %d-%d %s(%d) return [0x%016x][%08d]" % (tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret, event.ret2)
         #
         else:
-            outStr = "%s %d-%d *unknown*(%d) return [0x%016x][%04d]" % (tm, event.tgid, event.pid, event.syscallId, event.ret, event.ret2)
+            outStr = "%s %d-%d *unknown*(%d) return [0x%016x][%08d]" % (tm, event.tgid, event.pid, event.syscallId, event.ret, event.ret2)
     #
     handle(event, syscallName, outStr)
 #
