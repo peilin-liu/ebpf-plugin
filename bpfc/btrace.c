@@ -14,6 +14,7 @@ struct syscall_data_t {
     u64 pc;
     u64 lr;
     u64 ret;
+    __s64 ret2;
     u64 args[6];
     u64 start_ns;
     u64 duration_ns;
@@ -207,6 +208,7 @@ RAW_TRACEPOINT_PROBE(sys_exit){
         }
         data.type = 3;
         data.ret = ret;
+        data.ret2 = __s64(ret)
         u64 pid_tgid = bpf_get_current_pid_tgid();
         data.pid = pid_tgid;
         data.tgid = pid_tgid >> 32;
