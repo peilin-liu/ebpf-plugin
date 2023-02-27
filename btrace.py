@@ -28,9 +28,49 @@ g_sys_platform = utils.sys_arm64
 
 g_sysStrParamMap = {}
 
+def print_stack(event):
+    user_stack = []
+    stack_traces = b.get_table("stacks")
+
+    if args.user_stack and event.user_stack_id > 0:
+        user_stack = stack_traces.walk(event.user_stack_id)
+
+    kernel_stack = []
+    if args.kernel_stack and event.kernel_stack_id > 0:
+        kernel_tmp = stack_traces.walk(event.kernel_stack_id)
+
+        # fix kernel stack
+        for addr in kernel_tmp:
+            kernel_stack.append(addr)
+
+    do_delimiter = user_stack and kernel_stack
+
+    if args.folded:
+        # print folded stack output
+        user_stack = list(user_stack)
+        kernel_stack = list(kernel_stack)
+        line = [event.comm.decode('utf-8', 'replace')] + \
+            [b.sym(addr, event.tgid_pid) for addr in reversed(user_stack)] + \
+            (do_delimiter and ["-"] or []) + \
+            [b.ksym(addr) for addr in reversed(kernel_stack)]
+        print("%s %d" % (";".join(line), 1))
+    else:
+        # print default multi-line stack output.
+        for addr in kernel_stack:
+            print("    %s" % b.ksym(addr))
+        for addr in user_stack:
+            print("    %s" % b.sym(addr, event.tgid_pid))
+
+def handle(event, syscallName, debug_str):
+    if event.type == 3:
+        print_stack(event)
+
+    print(debug_str)
+    
 def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
     tm = datetime.now().strftime('%m-%d %H:%M:%S.%f')[:-3]
+    outStr = ""
     if (event.type == 1):
         systbl = g_sys_platform.g_systbl
         if (event.syscallId in systbl):
@@ -54,16 +94,15 @@ def print_syscall_event(cpu, data, size):
                     outStr += " [%s]"%valStr
                 #
                 else:
-                    outStr += " [0x%08x]"%event.args[i]
+                    outStr += " [0x%08x]" % event.args[i]
                 #
             #
-            print(outStr)
             if ((event.pid, event.syscallId) in g_sysStrParamMap):
                 g_sysStrParamMap.pop((event.pid, event.syscallId))
             #
         #
         else:
-            print("%s %d-%d *unknown*(%d) (0x%08x) (0x%08x) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.pc, event.lr, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]))
+            outStr = "%s %d-%d *unknown*(%d) (0x%08x) (0x%08x) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.pc, event.lr, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5])        
         #
     elif (event.type == 2):
         #收集字符串参数
@@ -84,11 +123,11 @@ def print_syscall_event(cpu, data, size):
             sysUserDesc = systbl[event.syscallId]
             syscallName = sysUserDesc[1]
             outStr = "%s %d-%d %s(%d) return [0x%08x]"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret)
-            print(outStr)
         #
         else:
-            print("%s %d-%d *unknown*(%d) return [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.ret)) 
+            outStr = "%s %d-%d *unknown*(%d) return [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.ret)
     #
+    handle(event, syscallName, outStr)
 #
 
 def filter_name_to_id(name, syscall_tbl):
@@ -141,6 +180,8 @@ if __name__ == "__main__":
     program_filter.add_argument("-t", "--tid", help="use thread id filter", type=int)
     program_filter.add_argument("-u", "--uid", help="use user id filter", type=int)
     program_filter.add_argument("-n", "--name", help="use process name filter", type=str)
+    program_filter.add_argument("-to", "--timeout", help="filter function only function timedouted, used ms", type=int)
+    program_filter.add_argument("-f", "--folded", action="store_true", help="output folded format, one line per stack (for flame graphs)")
 
     program_platform = parser.add_mutually_exclusive_group(required=True)
 
@@ -196,6 +237,11 @@ if __name__ == "__main__":
             for tid in tids:
                 tid_b[c_int(tid)] = c_int(tid)
         #
+        timeout = 0
+        if args.to:
+            timeout = args.to
+        utils.bpf_utils.insert_timeout_filter(c_src, timeout)
+        #
         inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
         input_map[c_int(0)] = inputVal
         systbl = g_sys_platform.g_systbl
@@ -212,7 +258,7 @@ if __name__ == "__main__":
 
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包
-        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=2048)
+        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=4096)
 
         while True:
             try:

@@ -13,7 +13,27 @@ struct syscall_data_t {
     u64 lr;
     u64 ret;
     u64 args[6];
+    u64 start_ns;
+    u64 duration_ns;
+#ifdef USER_STACKS
+    int user_stack_id;
+#endif
+#ifdef KERNEL_STACKS
+    int kernel_stack_id;
+    u64 kernel_ip;
+#endif
 };
+struct entry_t {
+    u64 start_ns;
+#ifdef USER_STACKS
+    int user_stack_id;
+#endif
+#ifdef KERNEL_STACKS
+    int kernel_stack_id;
+    u64 kernel_ip;
+#endif
+};
+
 BPF_PERF_OUTPUT(syscall_events);
 
 struct input_data_t {
@@ -31,13 +51,63 @@ BPF_HASH(sysfilter, u32, u8);
 
 BPF_HASH(tids_filter, u32, u32);
 
+BPF_HASH(entryinfo, u64, struct entry_t);
+
+#if defined(USER_STACKS) || defined(KERNEL_STACKS)
+BPF_STACK_TRACE(stacks, 2048);
+#endif
+
 RAW_TRACEPOINT_PROBE(sys_enter){
-    
+
+    u32 tid = bpf_get_current_pid_tgid();    
     PROCESS_FILTER
 
     //ctx->args[0]指向的内容才是真正的寄存器
     struct pt_regs *regs = (struct pt_regs*)(ctx->args[0]);
     unsigned long syscall_id = ctx->args[1];
+
+    entry = entryinfo.lookup(&tid)
+    if(!entry){
+        struct entry_t new_entry = {};
+        entryinfo.update(&tid, &new_entry)
+        entry = &new_entry
+    }
+    
+    entry->start_ns = bpf_ktime_get_ns();
+    entry->id = id;
+    #ifdef USER_STACKS
+    entry->user_stack_id = stacks.get_stackid(ctx, BPF_F_USER_STACK);
+    #endif
+
+    #ifdef KERNEL_STACKS
+    entry->kernel_stack_id = stacks.get_stackid(ctx, 0);
+
+    if (entry->kernel_stack_id >= 0) {
+        u64 ip = PT_REGS_IP(ctx);
+        u64 page_offset;
+
+        // if ip isn't sane, leave key ips as zero for later checking
+    #if defined(CONFIG_X86_64) && defined(__PAGE_OFFSET_BASE)
+        // x64, 4.16, ..., 4.11, etc., but some earlier kernel didn't have it
+        page_offset = __PAGE_OFFSET_BASE;
+    #elif defined(CONFIG_X86_64) && defined(__PAGE_OFFSET_BASE_L4)
+        // x64, 4.17, and later
+    #if defined(CONFIG_DYNAMIC_MEMORY_LAYOUT) && defined(CONFIG_X86_5LEVEL)
+        page_offset = __PAGE_OFFSET_BASE_L5;
+    #else
+        page_offset = __PAGE_OFFSET_BASE_L4;
+    #endif
+    #else
+        // earlier x86_64 kernels, e.g., 4.6, comes here
+        // arm64, s390, powerpc, x86_32
+        page_offset = PAGE_OFFSET;
+    #endif
+
+        if (ip > page_offset) {
+            entry->kernel_ip = ip;
+        }
+    }
+    #endif
 
     struct syscall_data_t data = {0};
 
@@ -92,14 +162,33 @@ RAW_TRACEPOINT_PROBE(sys_enter){
 }
 
 RAW_TRACEPOINT_PROBE(sys_exit){
+    u32 tid = bpf_get_current_pid_tgid();
+
     PROCESS_FILTER
 
     struct pt_regs *regs = (struct pt_regs*)(ctx->args[0]);
     u64 ret = ctx->args[1];
+
     u32 key = 0;
     struct input_data_t *inputParams = input.lookup(&key);
     if (inputParams) {
         struct syscall_data_t data = {0};
+
+        entry = entryinfo.lookup(&tid)
+        if(entry){
+            data.start_ns = entry->start_ns;
+            data.duration_ns = bpf_ktime_get_ns() - entryp->start_ns;
+            #ifdef USER_STACKS
+            data.user_stack_id = entryp->user_stack_id;
+            #endif
+
+            #ifdef KERNEL_STACKS
+            data.kernel_stack_id = entryp->kernel_stack_id;
+            data.kernel_ip = entryp->kernel_ip;
+            #endif
+
+            TIMEOUT_FILTER
+        }
 
         if(inputParams->is32) {
             bpf_probe_read_kernel(&data.syscallId, sizeof(data.syscallId), &regs->regs[7]);

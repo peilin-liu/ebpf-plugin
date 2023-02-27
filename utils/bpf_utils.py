@@ -27,8 +27,7 @@ def insert_tid_filter(bpf_text, tid):
 
 def insert_tids_filter(bpf_text, tids):
     tid_filter = """
-    u32 tid_ = bpf_get_current_pid_tgid();
-    if (!tids_filter.lookup(&tid_)) {
+    if (!tids_filter.lookup(&tid)) {
         return 0;
     }
     """
@@ -69,6 +68,17 @@ def insert_name_filter(bpf_text, program_name):
     }}
     """.format(compare_statement)
     bpf_text = bpf_text.replace("PROCESS_FILTER", process_name_filter)
+
+    return bpf_text
+#
+
+def insert_timeout_filter(bpf_text, timeout):
+    timeout_filter = """
+    if (data.duration_ns < timeout * 1000000) {
+        return 0;
+    }
+    """
+    bpf_text = bpf_text.replace("TIMEOUT_FILTER", timeout_filter)
 
     return bpf_text
 #
