@@ -68,7 +68,9 @@ def handle(event, syscallName, debug_str):
             print("%s time %09.2f, start %09.2f" % (debug_str, event.duration_ns/1000000, event.start_ns/1000000))
 
     #print(debug_str)
-    
+def print_lost_cb(cokie, lost):
+    return
+
 def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
     tm = datetime.now().strftime('%m-%d %H:%M:%S.%f')[:-3]
@@ -261,7 +263,7 @@ if __name__ == "__main__":
 
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包
-        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=8192)
+        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=8192, lost_cb=print_lost_cb)
 
         while True:
             try:
