@@ -64,7 +64,8 @@ def print_stack(event):
 def handle(event, syscallName, debug_str):
     if event.type == 3:
         #print_stack(event)
-        print("%s time %.2f, start %.2f" % (debug_str, event.duration_ns/1000000, event.start_ns/1000000))
+        if event.start_ns > 0:
+            print("%s time %09.2f, start %09.2f" % (debug_str, event.duration_ns/1000000, event.start_ns/1000000))
 
     #print(debug_str)
     
@@ -260,7 +261,7 @@ if __name__ == "__main__":
 
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包
-        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=4096)
+        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=8192)
 
         while True:
             try:
