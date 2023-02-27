@@ -62,10 +62,11 @@ def print_stack(event):
             print("    %s" % b.sym(addr, event.tgid_pid))
 
 def handle(event, syscallName, debug_str):
-    #if event.type == 3:
-    #    print_stack(event)
+    if event.type == 3:
+        #print_stack(event)
+        print("%s time %s, start %s" % (debug_str, event.duration_ns/1000000, event.start_ns/1000000))
 
-    print(debug_str)
+    #print(debug_str)
     
 def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
@@ -123,10 +124,10 @@ def print_syscall_event(cpu, data, size):
         if (event.syscallId in systbl):
             sysUserDesc = systbl[event.syscallId]
             syscallName = sysUserDesc[1]
-            outStr = "%s %d-%d %s(%d) return [0x%08x]"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret)
+            outStr = "%s %d-%d %s(%d) return [0x%16x]"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret)
         #
         else:
-            outStr = "%s %d-%d *unknown*(%d) return [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.ret)
+            outStr = "%s %d-%d *unknown*(%d) return [0x%16x]"%(tm, event.tgid, event.pid, event.syscallId, event.ret)
     #
     handle(event, syscallName, outStr)
 #
